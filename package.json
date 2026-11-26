@@ -1,0 +1,6 @@
+{
+  "name": "690-app",
+  "private": true,
+  "type": "module",
+  "dependencies": { "ai": "^6.0.0" }
+}

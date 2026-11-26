@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>690 — Generative Media Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+:root{--bg:#E8E8E6;--chartreuse:#D7CF07;--red:#A40606;--ink:#1a1a1a;--surface:#fff;--radius:20px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Poppins',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased}
+.app{max-width:720px;margin:0 auto;padding:2.5rem 1.5rem 5rem}
+.header{text-align:center;margin-bottom:2rem}
+.header h1{font-size:3.75rem;font-weight:600;color:var(--chartreuse);letter-spacing:-0.04em;line-height:1}
+.subtitle{font-size:0.85rem;font-weight:500;color:var(--red);margin-top:0.35rem}
+.panel{background:var(--surface);border-radius:var(--radius);padding:1.75rem;display:flex;flex-direction:column;gap:1.25rem;box-shadow:0 10px 34px rgba(0,0,0,0.07)}
+.tabs{display:flex;gap:0.5rem;background:var(--bg);border-radius:calc(var(--radius) - 4px);padding:0.35rem}
+.tab{flex:1;padding:0.8rem 1rem;border:none;border-radius:calc(var(--radius) - 9px);background:transparent;font-family:'Poppins',sans-serif;font-size:0.95rem;font-weight:500;color:var(--ink);cursor:pointer;transition:background 0.2s}
+.tab.active{background:var(--chartreuse);font-weight:600}
+.tab:not(.active):hover{background:rgba(0,0,0,0.05)}
+.field{display:flex;flex-direction:column;gap:0.4rem}
+.field.grow{flex:1}
+.field span{font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--red)}
+select,textarea,input{font-family:'Poppins',sans-serif;font-size:0.95rem;padding:0.85rem 1rem;border:none;border-radius:calc(var(--radius) - 7px);background:var(--bg);color:var(--ink);outline:none;width:100%}
+textarea{resize:vertical}
+select:focus,textarea:focus,input:focus{box-shadow:0 0 0 3px rgba(215,207,7,0.5)}
+.primary,.secondary{font-family:'Poppins',sans-serif;font-size:1rem;font-weight:600;padding:1rem 1.25rem;border:none;border-radius:calc(var(--radius) - 4px);cursor:pointer;transition:opacity 0.2s,transform 0.08s}
+.primary{background:var(--red);color:#fff}
+.secondary{background:var(--chartreuse);color:var(--ink);white-space:nowrap}
+.primary:disabled{opacity:0.4;cursor:not-allowed}
+.primary:not(:disabled):hover,.secondary:hover{opacity:0.88}
+.primary:not(:disabled):active,.secondary:active{transform:scale(0.98)}
+.error{font-size:0.85rem;font-weight:500;color:var(--red)}
+.loading{display:flex;flex-direction:column;align-items:center;gap:0.75rem;padding:3.5rem 1rem;text-align:center}
+.loading p{font-size:0.9rem;font-weight:500;color:var(--red)}
+.result{margin-top:1.5rem}
+.preview-wrap{border-radius:calc(var(--radius) - 6px);overflow:hidden;background:var(--bg);line-height:0}
+.preview{display:block;width:100%;height:auto}
+.controls{display:flex;gap:0.75rem;align-items:flex-end}
+@media (max-width:520px){.header h1{font-size:2.75rem}.controls{flex-direction:column;align-items:stretch}.secondary{text-align:center}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// 👇 EDIT THIS after deploying the API on Vercel
+const API_BASE = "https://your-api.vercel.app";
+
+const IMAGE_MODELS = [
+  { value: 'bfl/flux-2-flex', label: 'FLUX.2 Flex' },
+  { value: 'bfl/flux-pro-1.1', label: 'FLUX.1 Pro' },
+  { value: 'google/imagen-4.0-fast-generate', label: 'Imagen 4.0 Fast' },
+];
+const VIDEO_MODELS = [
+  { value: 'google/veo-3.1-fast-generate-001', label: 'Veo 3.1 Fast' },
+];
+
+function arpBlobPath(t, n = 7, cx = 200, cy = 200, base = 108) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const wobble = 18 * Math.sin(t * 1.1 + i * 1.7) + 12 * Math.sin(t * 0.7 + i * 2.9) + 8 * Math.sin(t * 1.9 + i * 0.9);
+    const r = base + wobble;
+    pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+  }
+  let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+  }
+  return d + ' Z';
+}
+
+function ArpBlob() {
+  const ref = useRef(null);
+  useEffect(() => {
+    let raf, start = performance.now();
+    const loop = (now) => {
+      if (ref.current) ref.current.setAttribute('d', arpBlobPath((now - start) / 1000));
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return <svg width="140" height="140" viewBox="0 0 400 400" aria-hidden="true"><path ref={ref} fill="#D7CF07" /></svg>;
+}
+
+function App() {
+  const [type, setType] = useState('image');
+  const [model, setModel] = useState(IMAGE_MODELS[0].value);
+  const [prompt, setPrompt] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [filename, setFilename] = useState('');
+  const [error, setError] = useState('');
+
+  const isImage = type === 'image';
+  const models = isImage ? IMAGE_MODELS : VIDEO_MODELS;
+  useEffect(() => setModel(models[0].value), [type]);
+
+  async function generate() {
+    if (!prompt.trim()) return setError('Enter a prompt first.');
+    setLoading(true); setError(''); setResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, type, model }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      setResult(data);
+      const ext = data.mimeType === 'video/mp4' ? 'mp4' : 'png';
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      setFilename(`690_${ts}.${ext}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function download() {
+    if (!result || !filename) return;
+    const a = document.createElement('a');
+    a.href = result.data; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  return (
+    <div className="app">
+      <header className="header"><h1>690</h1><p className="subtitle">generative media studio</p></header>
+      <section className="panel">
+        <div className="tabs">
+          <button className={isImage ? 'tab active' : 'tab'} onClick={() => setType('image')}>Image</button>
+          <button className={!isImage ? 'tab active' : 'tab'} onClick={() => setType('video')}>Video</button>
+        </div>
+        <label className="field">
+          <span>Model</span>
+          <select value={model} onChange={(e) => setModel(e.target.value)}>
+            {models.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>Prompt</span>
+          <textarea rows={3} value={prompt} placeholder="Describe what you want to create..." onChange={(e) => setPrompt(e.target.value)} />
+        </label>
+        <button className="primary" onClick={generate} disabled={loading || !prompt.trim()}>
+          {loading ? 'Generating…' : `Generate ${isImage ? 'Image' : 'Video'}`}
+        </button>
+        {error && <p className="error">{error}</p>}
+      </section>
+      {loading && <div className="loading"><ArpBlob /><p>shaping your {isImage ? 'image' : 'video'}…</p></div>}
+      {result && !loading && (
+        <section className="panel result">
+          <div className="preview-wrap">
+            {result.type === 'image' ? <img className="preview" src={result.data} alt="Generated" /> : <video className="preview" src={result.data} controls />}
+          </div>
+          <div className="controls">
+            <label className="field grow"><span>Filename</span><input value={filename} onChange={(e) => setFilename(e.target.value)} /></label>
+            <button className="secondary" onClick={download}>Download</button>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
